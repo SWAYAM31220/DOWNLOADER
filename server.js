@@ -163,6 +163,7 @@ app.post('/api/download', async (req, res) => {
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
+    console.log("Tiiny API raw response:", data);
     const normalizedResponse = normalizeResponse(data, detectedPlatform);
 
     res.json(normalizedResponse);
@@ -184,4 +185,5 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
 
