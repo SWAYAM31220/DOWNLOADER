@@ -23,8 +23,7 @@
     "cors": "^2.8.5",
     "node-fetch": "^2.7.0",
     "ytdl-core": "^4.11.5"  
-    "miniget": "^4.2.2"
-
+    "miniget": "^4.2.2",
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
