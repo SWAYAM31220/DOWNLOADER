@@ -1,3 +1,4 @@
+process.env.YTDL_NO_UPDATE = '1';
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
@@ -133,3 +134,4 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
