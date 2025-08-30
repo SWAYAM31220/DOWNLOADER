@@ -2,7 +2,7 @@ process.env.YTDL_NO_UPDATE = '1';
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
-const ytdl = require('ytdl-core'); // ✅ added
+const ytdl = require('ytdl-core'); // ✅ for YouTube only
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -69,14 +69,19 @@ app.post('/api/download', async (req, res) => {
     if (detectedPlatform === 'youtube') {
       try {
         const info = await ytdl.getInfo(url);
-        const videoFormats = ytdl.filterFormats(info.formats, 'videoandaudio');
-        const bestFormat = videoFormats[0]; // pick first available
+
+        // try to get both video + audio, fallback to video-only
+        let videoFormats = ytdl.filterFormats(info.formats, 'videoandaudio');
+        if (!videoFormats.length) {
+          videoFormats = ytdl.filterFormats(info.formats, 'videoonly');
+        }
+        const bestFormat = videoFormats[0];
 
         return res.json({
           status: 'success',
           title: info.videoDetails.title,
-          video: bestFormat.url,
-          thumbnail: info.videoDetails.thumbnails.pop().url
+          video: bestFormat?.url || null,
+          thumbnail: info.videoDetails.thumbnails.pop()?.url || null
         });
       } catch (ytError) {
         console.error('YouTube Error:', ytError);
@@ -97,7 +102,6 @@ app.post('/api/download', async (req, res) => {
     }
 
     const tiinyUrl = `https://multimedia.tiiny.io?${tiinyParam}=${encodeURIComponent(url)}`;
-
     const response = await fetch(tiinyUrl);
 
     if (!response.ok) {
@@ -134,4 +138,3 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
-
