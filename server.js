@@ -5,9 +5,19 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ✅ CORS configuration
+const corsOptions = {
+  origin: ["https://swayam31220.github.io"], // your GitHub Pages domain
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type"],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // handle preflight
+
 // Middleware
-app.use(cors());
 app.use(express.json());
+
 
 // Platform mapping for tiiny.io API
 const platformMapping = {
@@ -174,3 +184,4 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
