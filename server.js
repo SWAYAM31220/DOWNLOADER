@@ -1,8 +1,6 @@
-process.env.YTDL_NO_UPDATE = '1';
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
-const ytdl = require('ytdl-core'); // ✅ for YouTube only
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,113 +14,203 @@ const platformMapping = {
   'reel': 'reel',
   'igpost': 'igpost',
   'tiktok': 'tiktok',
+  'youtube': 'yt',
   'facebook': 'fb',
   'threads': 'threads',
-  'spotify': 'spotify',
   'pinterest': 'pinterest',
   'twitter': 'twitter',
   'x': 'twitter',
   'pornhub': 'pornhub'
 };
 
-// Helper function to detect platform from URL
+// Enhanced platform detection with shortened URLs support
 function detectPlatform(url) {
   const urlLower = url.toLowerCase();
-
+  
+  // Instagram
   if (urlLower.includes('instagram.com/reel/')) return 'reel';
   if (urlLower.includes('instagram.com/p/')) return 'igpost';
-  if (urlLower.includes('tiktok.com')) return 'tiktok';
-  if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be')) return 'youtube';
-  if (urlLower.includes('facebook.com')) return 'facebook';
+  
+  // TikTok
+  if (urlLower.includes('tiktok.com') || urlLower.includes('vm.tiktok.com')) return 'tiktok';
+  
+  // YouTube (including shortened URLs)
+  if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be') || urlLower.includes('m.youtube.com')) return 'youtube';
+  
+  // Facebook
+  if (urlLower.includes('facebook.com') || urlLower.includes('fb.watch') || urlLower.includes('m.facebook.com')) return 'facebook';
+  
+  // Threads
   if (urlLower.includes('threads.net')) return 'threads';
-  if (urlLower.includes('spotify.com')) return 'spotify';
-  if (urlLower.includes('pinterest.com')) return 'pinterest';
-  if (urlLower.includes('twitter.com') || urlLower.includes('x.com')) return 'twitter';
+  
+  // Pinterest (including shortened URLs)
+  if (urlLower.includes('pinterest.com') || urlLower.includes('pin.it')) return 'pinterest';
+  
+  // Twitter/X (including shortened URLs)
+  if (urlLower.includes('twitter.com') || urlLower.includes('x.com') || urlLower.includes('t.co')) return 'twitter';
+  
+  // Pornhub
   if (urlLower.includes('pornhub.com')) return 'pornhub';
-
+  
   return null;
+}
+
+// Response normalizer to handle different platform formats
+function normalizeResponse(data, platform) {
+  // Remove dev field from all responses
+  const { dev, ...cleanData } = data;
+  
+  // Base response structure
+  const baseResponse = {
+    status: cleanData.status,
+    platform: platform,
+    type: null,
+    title: null,
+    thumbnail: null,
+    items: []
+  };
+  
+  if (cleanData.status !== 'success') {
+    return {
+      ...baseResponse,
+      message: cleanData.message || 'Failed to process request'
+    };
+  }
+  
+  switch (platform) {
+    case 'reel':
+    case 'tiktok':
+    case 'facebook':
+    case 'threads':
+    case 'twitter':
+      return {
+        ...baseResponse,
+        type: 'video',
+        thumbnail: cleanData.thumbnail,
+        items: [{
+          type: 'video',
+          url: cleanData.video,
+          thumbnail: cleanData.thumbnail
+        }]
+      };
+      
+    case 'igpost':
+      return {
+        ...baseResponse,
+        type: 'images',
+        items: cleanData.images ? cleanData.images.map((imageUrl, index) => ({
+          type: 'image',
+          url: imageUrl,
+          thumbnail: imageUrl,
+          index: index + 1,
+          total: cleanData.total_image || cleanData.images.length
+        })) : []
+      };
+      
+    case 'youtube':
+      return {
+        ...baseResponse,
+        type: 'video_audio',
+        title: cleanData.title,
+        thumbnail: cleanData.thumbnail,
+        duration: cleanData.duration,
+        items: [
+          {
+            type: 'video',
+            url: cleanData.video_link,
+            thumbnail: cleanData.thumbnail,
+            label: 'Download Video'
+          },
+          {
+            type: 'audio',
+            url: cleanData.audio_link,
+            thumbnail: cleanData.thumbnail,
+            label: 'Download Audio'
+          }
+        ].filter(item => item.url) // Remove items with no URL
+      };
+      
+    case 'pinterest':
+      return {
+        ...baseResponse,
+        type: 'image',
+        title: cleanData.title,
+        thumbnail: cleanData.media_link,
+        items: [{
+          type: 'image',
+          url: cleanData.media_link,
+          thumbnail: cleanData.media_link
+        }]
+      };
+      
+    case 'pornhub':
+      return {
+        ...baseResponse,
+        type: 'video',
+        title: cleanData.title,
+        thumbnail: cleanData.cover,
+        items: [{
+          type: 'video',
+          url: cleanData.video_link,
+          thumbnail: cleanData.cover
+        }]
+      };
+      
+    default:
+      return {
+        ...baseResponse,
+        message: 'Unsupported platform response format'
+      };
+  }
 }
 
 // Main download endpoint
 app.post('/api/download', async (req, res) => {
   try {
     const { platform, url } = req.body;
-
+    
     if (!url) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'URL is required'
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'URL is required' 
       });
     }
-
+    
     // Auto-detect platform if not provided
     let detectedPlatform = platform || detectPlatform(url);
-
-    if (!detectedPlatform) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Unsupported platform or invalid URL'
+    
+    if (!detectedPlatform || !platformMapping[detectedPlatform]) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Unsupported platform or invalid URL' 
       });
     }
-
-    // ✅ Special handling for YouTube
-    if (detectedPlatform === 'youtube') {
-      try {
-        const info = await ytdl.getInfo(url);
-
-        // try to get both video + audio, fallback to video-only
-        let videoFormats = ytdl.filterFormats(info.formats, 'videoandaudio');
-        if (!videoFormats.length) {
-          videoFormats = ytdl.filterFormats(info.formats, 'videoonly');
-        }
-        const bestFormat = videoFormats[0];
-
-        return res.json({
-          status: 'success',
-          title: info.videoDetails.title,
-          video: bestFormat?.url || null,
-          thumbnail: info.videoDetails.thumbnails.pop()?.url || null
-        });
-      } catch (ytError) {
-        console.error('YouTube Error:', ytError);
-        return res.status(500).json({
-          status: 'error',
-          message: 'Failed to process YouTube video'
-        });
-      }
-    }
-
-    // ✅ For other platforms → tiiny.io
+    
+    // Map platform to tiiny.io parameter
     const tiinyParam = platformMapping[detectedPlatform];
-    if (!tiinyParam) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Unsupported platform'
-      });
-    }
-
+    
+    // Construct tiiny.io API URL
     const tiinyUrl = `https://multimedia.tiiny.io?${tiinyParam}=${encodeURIComponent(url)}`;
+    
+    // Fetch from tiiny.io
     const response = await fetch(tiinyUrl);
-
+    
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-
+    
     const data = await response.json();
-
-    const cleanResponse = {
-      status: data.status,
-      video: data.video,
-      thumbnail: data.thumbnail
-    };
-
-    res.json(cleanResponse);
-
+    
+    // Normalize and clean the response
+    const normalizedResponse = normalizeResponse(data, detectedPlatform);
+    
+    res.json(normalizedResponse);
+    
   } catch (error) {
     console.error('Error:', error);
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to process download request'
+    res.status(500).json({ 
+      status: 'error', 
+      message: 'Failed to process download request' 
     });
   }
 });
