@@ -7,10 +7,14 @@ const PORT = process.env.PORT || 3000;
 
 // ✅ CORS configuration
 const corsOptions = {
-  origin: ["https://swayam31220.github.io"], // your GitHub Pages domain
+  origin: [
+    "https://swayam31220.github.io", // old GitHub Pages domain
+    "https://app.swayam.gt.tc"       // new custom domain
+  ],
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type"],
 };
+
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions)); // handle preflight
@@ -188,6 +192,7 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
 
 
 
