@@ -178,6 +178,9 @@ app.post('/api/download', async (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
+app.get('/ping', (req, res) => {
+  res.send('ok');
+});
 
 // Start server
 app.listen(PORT, () => {
@@ -185,5 +188,6 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
 
 
